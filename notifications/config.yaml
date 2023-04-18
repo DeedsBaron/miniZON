@@ -1,0 +1,10 @@
+kafka:
+  brokers:
+    - kafka1:29091
+    - kafka2:29092
+    - kafka3:29093
+  consumerGroup: "notifications"
+  workers: 3
+  topic: "orders_status_changes"
+loggerLevel: "INFO"
+metricsPort: 8080

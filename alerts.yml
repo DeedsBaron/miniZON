@@ -1,0 +1,54 @@
+groups:
+  - name: alerts
+    rules:
+      - alert: TargetIsDown
+        expr: up == 0
+        for: 30s
+        labels:
+          severity: medium
+        annotations:
+          summary: "The target {{ $labels.job }} is down"
+          description: "Instance {{ $labels.instance }} of job {{ $labels.job }} has been down for more than 30 seconds."
+
+      - alert: ServiceCheckoutIsDown
+        expr: up{job="healthcheck", instance="checkout:8080"} == 0
+        for: 5s
+        labels:
+          severity: error
+        annotations:
+          summary: "ServiceIsDown"
+          description: "Service checkout is down!"
+      - alert: ServiceLomsIsDown
+        expr: up{job="healthcheck", instance="loms:8080"} == 0
+        for: 5s
+        labels:
+          severity: error
+        annotations:
+          summary: "ServiceIsDown"
+          description: "Service loms is down!"
+      - alert: ServiceNotificationsIsDown
+        expr: up{job="healthcheck", instance="notifications:8080"} == 0
+        for: 5s
+        labels:
+          severity: error
+        annotations:
+          summary: "ServiceIsDown"
+          description: "Service notifications is down!"
+
+      - alert: ServiceLomsHighErrorRate
+        expr: sum(rate(route256_grpc_histogram_server_response_time_seconds_sum{job='loms', status!='OK'}[5m])) / sum(rate(route256_grpc_histogram_server_response_time_seconds_sum{job='loms', status='OK'}[5m])) * 100 > 5 unless sum(rate(route256_grpc_histogram_server_response_time_seconds_sum{job='loms', status='OK'}[5m])) == 0
+        for: 3s
+        labels:
+          severity: error
+        annotations:
+          summary: "Service loms has high error rate"
+          description: "Service loms has more than 5% error rate for last 5 minutes"
+
+      - alert: ServiceCheckoutHighErrorRate
+        expr: sum(rate(route256_grpc_histogram_server_response_time_seconds_sum{job='checkout', status!='OK'}[5m])) / sum(rate(route256_grpc_histogram_server_response_time_seconds_sum{job='checkout', status='OK'}[5m])) * 100 > 5 unless sum(rate(route256_grpc_histogram_server_response_time_seconds_sum{job='checkout', status='OK'}[5m])) == 0
+        for: 3s
+        labels:
+          severity: error
+        annotations:
+          summary: "Service checkout has high error rate"
+          description: "Service checkout has more than 5% error rate for last 5 minutes"

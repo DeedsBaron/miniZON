@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package proto.orders_status_changes;
+
+option go_package = "route256/loms/internal/client/kafka/proto/orders_status_changes";
+
+import "google/protobuf/timestamp.proto";
+
+message OrderStatusChanges {
+  string old_status = 2;
+  string new_status = 3;
+  google.protobuf.Timestamp changed_at = 4;
+}

@@ -1,0 +1,315 @@
+version: "3.3"
+
+networks:
+  net:
+    driver: bridge
+
+volumes:
+  pgcheckoutdata:
+    driver: local
+  pglomsdata:
+    driver: local
+
+services:
+  loms:
+    container_name: loms
+    depends_on:
+      - pgbouncer
+      - zookeeper
+      - kafka1
+      - kafka2
+      - kafka3
+      - kafka-setup
+      - jaeger
+    image: loms
+    environment:
+      - TZ=Europe/Moscow
+      - JAEGER_AGENT_HOST=jaeger
+      - JAEGER_AGENT_PORT=6831
+      - JAEGER_SAMPLER_TYPE=const
+      - JAEGER_SAMPLER_PARAM=1
+      - JAEGER_BINARY_PORT=6832
+    build: ./loms/
+    ports:
+      - "50051:50051"
+      - "8080:8080"
+    networks:
+      - net
+    volumes:
+      - "/etc/timezone:/etc/timezone:ro"
+      - "/etc/localtime:/etc/localtime:ro"
+    restart: on-failure
+    healthcheck:
+      test: [ "CMD-SHELL", "curl --fail http://localhost:8080/health || exit 1" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  notifications:
+    container_name: notifications
+    depends_on:
+      - zookeeper
+      - kafka1
+      - kafka2
+      - kafka3
+      - kafka-setup
+    restart: on-failure
+    image: notifications
+    environment:
+      - TZ=Europe/Moscow
+    build: ./notifications/
+    ports:
+      - "50053:50053"
+      - "8083:8080"
+    networks:
+      - net
+    volumes:
+      - "/etc/timezone:/etc/timezone:ro"
+      - "/etc/localtime:/etc/localtime:ro"
+
+  checkout:
+    container_name: checkout
+    depends_on:
+      - pgbouncer
+      - zookeeper
+      - kafka1
+      - kafka2
+      - kafka3
+      - kafka-setup
+      - jaeger
+    image: checkout
+    environment:
+      - JAEGER_AGENT_HOST=jaeger
+      - JAEGER_AGENT_PORT=6831
+      - JAEGER_SAMPLER_TYPE=const
+      - JAEGER_SAMPLER_PARAM=1
+      - JAEGER_BINARY_PORT=6832
+    build: ./checkout/
+    restart: on-failure
+    ports:
+      - "8081:8080"
+      - "50052:50052"
+    networks:
+      - net
+
+  pgbouncer:
+    image: edoburu/pgbouncer
+    depends_on:
+      - loms_postgres
+      - checkout_postgres
+    container_name: pgbouncer
+    restart: always
+    ports:
+      - "6432:6432"
+    networks:
+      - net
+    volumes:
+      - ./pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini
+      - ./pgbouncer/userlist.txt:/etc/pgbouncer/userlist.txt
+
+  checkout_postgres:
+    image: postgres:15.1
+    environment:
+      DB_HOST: ${CHECKOUT_DB_HOST}
+      DB_PORT: ${CHECKOUT_DB_PORT}
+      POSTGRES_DB: ${CHECKOUT_POSTGRES_DB}
+      POSTGRES_USER: ${CHECKOUT_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${CHECKOUT_POSTGRES_PASSWORD}
+      PGDATA: ${CHECKOUT_PGDATA}
+    container_name: 'checkout-postgres-container'
+    volumes:
+      - pgcheckoutdata:${CHECKOUT_PGDATA}
+    ports:
+      - "5433:5432"
+    restart: unless-stopped
+    networks:
+      - net
+
+  loms_postgres:
+    image: postgres:15.1
+    environment:
+      DB_HOST: ${LOMS_DB_HOST}
+      DB_PORT: ${LOMS_DB_PORT}
+      POSTGRES_DB: ${LOMS_POSTGRES_DB}
+      POSTGRES_USER: ${LOMS_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${LOMS_POSTGRES_PASSWORD}
+      PGDATA: ${LOMS_PGDATA}
+    container_name: 'loms-postgres-container'
+    volumes:
+      - pglomsdata:${LOMS_PGDATA}
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    networks:
+      - net
+
+  #kafka
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    container_name: zookeeper
+    ports:
+      - "2181:2181"
+      - "2888:2888"
+      - "3888:3888"
+    healthcheck:
+      test: echo stat | nc localhost 2181
+      interval: 10s
+      timeout: 10s
+      retries: 3
+    environment:
+      - ZOOKEEPER_SERVER_ID=1
+      - ZOOKEEPER_CLIENT_PORT=2181
+      - ZOOKEEPER_TICK_TIME=2000
+      - ZOOKEEPER_INIT_LIMIT=5
+      - ZOOKEEPER_SYNC_LIMIT=2
+      - ZOOKEEPER_SERVERS=zookeeper:2888:3888
+    networks:
+      - net
+    restart: on-failure
+
+  kafka1:
+    image: confluentinc/cp-kafka:latest
+    container_name: kafka1
+    healthcheck:
+      test: echo stat | nc localhost 9091
+    depends_on:
+      - zookeeper
+    ports:
+      - "9091:9091"
+    environment:
+      - KAFKA_LISTENERS=LISTENER_INT://kafka1:29091,LISTENER_EXT://0.0.0.0:9091
+      - KAFKA_ADVERTISED_LISTENERS=LISTENER_INT://kafka1:29091,LISTENER_EXT://localhost:9091
+      - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=LISTENER_INT:PLAINTEXT,LISTENER_EXT:PLAINTEXT
+      - KAFKA_INTER_BROKER_LISTENER_NAME=LISTENER_INT
+      - KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181
+      - KAFKA_BROKER_ID=1
+      - ZOOKEEPER=zookeeper:2181
+    networks:
+      - net
+    restart: on-failure
+
+  kafka2:
+    image: confluentinc/cp-kafka:latest
+    container_name: kafka2
+    healthcheck:
+      test: echo stat | nc localhost 9092
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      - KAFKA_LISTENERS=LISTENER_INT://kafka2:29092,LISTENER_EXT://0.0.0.0:9092
+      - KAFKA_ADVERTISED_LISTENERS=LISTENER_INT://kafka2:29092,LISTENER_EXT://localhost:9092
+      - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=LISTENER_INT:PLAINTEXT,LISTENER_EXT:PLAINTEXT
+      - KAFKA_INTER_BROKER_LISTENER_NAME=LISTENER_INT
+      - KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181
+      - KAFKA_BROKER_ID=2
+      - ZOOKEEPER=zookeeper:2181
+    networks:
+      - net
+    restart: on-failure
+
+  kafka3:
+    image: confluentinc/cp-kafka:latest
+    container_name: kafka3
+    healthcheck:
+      test: echo stat | nc localhost 9093
+    depends_on:
+      - zookeeper
+    ports:
+      - "9094:9093"
+    environment:
+      - KAFKA_LISTENERS=LISTENER_INT://kafka3:29093,LISTENER_EXT://0.0.0.0:9093
+      - KAFKA_ADVERTISED_LISTENERS=LISTENER_INT://kafka3:29093,LISTENER_EXT://localhost:9093
+      - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=LISTENER_INT:PLAINTEXT,LISTENER_EXT:PLAINTEXT
+      - KAFKA_INTER_BROKER_LISTENER_NAME=LISTENER_INT
+      - KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181
+      - KAFKA_BROKER_ID=3
+      - ZOOKEEPER=zookeeper:2181
+    networks:
+      - net
+    restart: on-failure
+
+  kafka-setup:
+    networks:
+      - net
+    image: confluentinc/cp-kafka:latest
+    hostname: kafka-setup
+    container_name: kafka-setup
+    depends_on:
+      - kafka1
+      - kafka2
+      - kafka3
+      - zookeeper
+    entrypoint: [ '/bin/sh', '-c' ]
+    command: |
+      "
+      # blocks until kafka is reachable
+      kafka-topics --bootstrap-server kafka2:29092 --list
+
+      echo -e 'Creating kafka topics'
+      kafka-topics --bootstrap-server kafka2:29092 --create --if-not-exists --topic orders_status_changes --replication-factor 1 --partitions 3
+
+      echo -e 'Successfully created the following topics:'
+      kafka-topics --bootstrap-server kafka2:29092 --list
+      "
+  prometheus:
+    container_name: prom
+    depends_on:
+      - loms
+      - notifications
+      - checkout
+      - alertmanager
+    image: prom/prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./alerts.yml:/etc/prometheus/alerts.yml
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    networks:
+      - net
+  grafana:
+    container_name: grafana
+    image: grafana/grafana-oss
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/var/lib/grafana
+    links:
+      - prometheus
+    networks:
+      - net
+
+  jaeger:
+    container_name: jaeger
+    environment:
+      - SPAN_STORAGE_TYPE=memory
+      - JAEGER_SAMPLER_TYPE=const
+      - JAEGER_SAMPLER_PARAM=1
+    image: jaegertracing/all-in-one:1.18
+    ports:
+      - "5775:5775/udp"
+      - "6831:6831/udp"
+      - "6832:6832/udp"
+      - "5778:5778"
+      - "16686:16686" # web
+      - "14268:14268"
+      - "9411:9411"
+    restart: on-failure
+    networks:
+      - net
+
+  alertmanager:
+    image: prom/alertmanager
+    container_name: alertmanager
+    ports:
+      - '9093:9093'
+    volumes:
+      - ./alertmanager.yml:/etc/alertmanager/alertmanager.yml
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+    restart: on-failure
+    networks:
+      - net

@@ -1,0 +1,35 @@
+global:
+  scrape_interval: 2s
+  scrape_timeout: 2s
+  evaluation_interval: 1s # Evaluate rules
+
+rule_files:
+  - "alerts.yml"
+
+alerting:
+  alertmanagers:
+    - scheme: http
+      static_configs:
+        - targets:
+            - "alertmanager:9093"
+
+scrape_configs:
+  # The job name is added as a label `job=<job_name>` to any timeseries scraped from this config.
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+  - job_name: "checkout"
+    static_configs:
+      - targets:
+          - "checkout:8080"
+  - job_name: "healthcheck"
+    metrics_path: '/healthcheck'
+    static_configs:
+      - targets:
+          - "checkout:8080"
+          - "loms:8080"
+          - "notifications:8080"
+  - job_name: "loms"
+    static_configs:
+      - targets:
+          - "loms:8080"

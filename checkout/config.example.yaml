@@ -1,0 +1,14 @@
+token: "xxxxxx"
+grpcPort: 50052
+services:
+  loms: "localhost:50051"
+  ps: "route256.pavl.uk:8082"
+dbConfig:
+  host: "pgbouncer"
+  dbName: "checkout"
+  user: "xxxx"
+  password: "xxxxx"
+  port: "6432"
+  sslMode: "disable"
+workers:
+  amount: 5

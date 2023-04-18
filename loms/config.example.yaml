@@ -1,0 +1,23 @@
+grpcPort: 50051
+dbConfig:
+  host: "pgbouncer"
+  dbName: "loms"
+  user: "xxxx"
+  password: "xxxx"
+  port: "6432"
+  sslMode: "disable"
+cronJobs:
+  cancelReservationDueTimeoutJob:
+    cron: "* * * * *"
+    #время, по истечению которого, если заказ не был оплачен -
+    #отменяется и снимаются резервации. В формате time.Duration
+    orderToBePayedTimeout: "30m"
+  readOutboxSendJob:
+    cron: "* * * * * *"
+    batchSizeToRead: 500
+    topicToSend: "orders_status_changes"
+kafka:
+  brokers:
+    - kafka1:29091
+    - kafka2:29092
+    - kafka3:29093
