@@ -1,4 +1,4 @@
-# MiniZON ped proj
+# MiniZON
 # LOMS (Logistics and Order Management System)
 
 Сервис отвечает за учет заказов и логистику.
